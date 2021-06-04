@@ -1,7 +1,7 @@
 // This file implements the extractgql CLI tool.
 
-import fs = require('fs');
-import path = require('path');
+import fs = require("fs");
+import path = require("path");
 
 import {
   parse,
@@ -11,19 +11,19 @@ import {
   print,
   DefinitionNode,
   separateOperations,
-} from 'graphql';
+} from "graphql";
 
 import {
   getOperationDefinitions,
   getFragmentNames,
   isFragmentDefinition,
   isOperationDefinition,
-} from './extractFromAST';
+} from "./extractFromAST";
 
 import {
   findTaggedTemplateLiteralsInJS,
   eliminateInterpolations,
-} from './extractFromJS';
+} from "./extractFromJS";
 
 import {
   getQueryKey,
@@ -33,20 +33,18 @@ import {
   TransformedQueryWithId,
   OutputMap,
   QueryTransformer,
-} from './common';
+} from "./common";
 
-import {
-  addTypenameTransformer,
-} from './queryTransformers';
+import { addTypenameTransformer } from "./queryTransformers";
 
-import _ = require('lodash');
+import _ = require("lodash");
 
 export type ExtractGQLOptions = {
-  inputFilePath: string,
-  outputFilePath?: string,
-  queryTransformers?: QueryTransformer[],
-  extension?: string,
-  inJsCode?: boolean,
+  inputFilePath: string;
+  outputFilePath?: string;
+  queryTransformers?: QueryTransformer[];
+  extension?: string;
+  inJsCode?: boolean;
 };
 
 export class ExtractGQL {
@@ -67,14 +65,14 @@ export class ExtractGQL {
   public inJsCode: boolean = false;
 
   // The template literal tag for GraphQL queries in JS code
-  public literalTag: string = 'gql';
+  public literalTag: string = "gql";
 
   // Given a file path, this returns the extension of the file within the
   // file path.
   public static getFileExtension(filePath: string): string {
-    const pieces = path.basename(filePath).split('.');
+    const pieces = path.basename(filePath).split(".");
     if (pieces.length <= 1) {
-      return '';
+      return "";
     }
     return pieces[pieces.length - 1];
   }
@@ -82,7 +80,7 @@ export class ExtractGQL {
   // Reads a file into a string.
   public static readFile(filePath: string): Promise<string> {
     return new Promise((resolve, reject) => {
-      fs.readFile(filePath, 'utf8', (err, data) => {
+      fs.readFile(filePath, "utf8", (err, data) => {
         if (err) {
           reject(err);
         } else {
@@ -107,9 +105,9 @@ export class ExtractGQL {
 
   constructor({
     inputFilePath,
-    outputFilePath = 'extracted_queries.json',
+    outputFilePath = "extracted_queries.json",
     queryTransformers = [],
-    extension = 'graphql',
+    extension = "graphql",
     inJsCode = false,
   }: ExtractGQLOptions) {
     this.inputFilePath = inputFilePath;
@@ -137,9 +135,7 @@ export class ExtractGQL {
 
   // Just calls getQueryDocumentKey with this.queryTransformers as its
   // set of query transformers and returns a serialization of the query.
-  public getQueryDocumentKey(
-    document: DocumentNode,
-  ): string {
+  public getQueryDocumentKey(document: DocumentNode): string {
     return getQueryDocumentKey(document, this.queryTransformers);
   }
 
@@ -150,10 +146,18 @@ export class ExtractGQL {
     const queryDefinitions = getOperationDefinitions(transformedDocument);
     const result: OutputMap = {};
     queryDefinitions.forEach((transformedDefinition) => {
-      const transformedQueryWithFragments = this.getQueryFragments(transformedDocument, transformedDefinition);
+      const transformedQueryWithFragments = this.getQueryFragments(
+        transformedDocument,
+        transformedDefinition
+      );
       transformedQueryWithFragments.definitions.unshift(transformedDefinition);
-      const docQueryKey = this.getQueryDocumentKey(transformedQueryWithFragments);
-      result[docQueryKey] = this.getQueryId();
+      const docQueryKey = this.getQueryDocumentKey(
+        transformedQueryWithFragments
+      );
+      const definition = transformedQueryWithFragments
+        .definitions[0] as DefinitionNode & { name: { value: string } };
+      const opName = definition.name.value;
+      result[opName] = docQueryKey;
     });
     return result;
   }
@@ -162,13 +166,15 @@ export class ExtractGQL {
   // and return the promise to an OutputMap. Used primarily for unit tests.
   public processGraphQLFile(graphQLFile: string): Promise<OutputMap> {
     return new Promise<OutputMap>((resolve, reject) => {
-      ExtractGQL.readFile(graphQLFile).then((fileContents) => {
-        const graphQLDocument = parse(fileContents);
+      ExtractGQL.readFile(graphQLFile)
+        .then((fileContents) => {
+          const graphQLDocument = parse(fileContents);
 
-        resolve(this.createMapFromDocument(graphQLDocument));
-      }).catch((err) => {
-        reject(err);
-      });
+          resolve(this.createMapFromDocument(graphQLDocument));
+        })
+        .catch((err) => {
+          reject(err);
+        });
     });
   }
 
@@ -182,7 +188,7 @@ export class ExtractGQL {
       return this.createMapFromDocument(document);
     });
 
-    return (_.merge({} as OutputMap, ...resultMaps) as OutputMap);
+    return _.merge({} as OutputMap, ...resultMaps) as OutputMap;
   }
 
   public readGraphQLFile(graphQLFile: string): Promise<string> {
@@ -197,16 +203,19 @@ export class ExtractGQL {
         if (this.inJsCode) {
           // Read from a JS file
           return ExtractGQL.readFile(inputFile).then((result) => {
-            const literalContents = findTaggedTemplateLiteralsInJS(result, this.literalTag);
+            const literalContents = findTaggedTemplateLiteralsInJS(
+              result,
+              this.literalTag
+            );
             const noInterps = literalContents.map(eliminateInterpolations);
-            const joined = noInterps.join('\n');
+            const joined = noInterps.join("\n");
             return joined;
           });
         } else {
           return this.readGraphQLFile(inputFile);
         }
       } else {
-        return '';
+        return "";
       }
     });
   }
@@ -216,11 +225,18 @@ export class ExtractGQL {
   // instance from these files.
   public processInputPath(inputPath: string): Promise<OutputMap> {
     return new Promise<OutputMap>((resolve, reject) => {
-      this.readInputPath(inputPath).then((docString: string) => {
-        resolve(this.createOutputMapFromString(docString));
-      }).catch((err) => {
-        reject(err);
-      });
+      this.readInputPath(inputPath)
+        .then((docString: string) => {
+          try {
+            resolve(this.createOutputMapFromString(docString));
+          } catch (e) {
+            console.error(e);
+          }
+        })
+        .catch((err) => {
+          console.error(err);
+          // reject(err);
+        });
     });
   }
 
@@ -235,21 +251,23 @@ export class ExtractGQL {
               reject(err);
             }
             const promises: Promise<string>[] = items.map((item) => {
-              return this.readInputPath(inputPath + '/' + item);
+              return this.readInputPath(inputPath + "/" + item);
             });
 
             Promise.all(promises).then((queryStrings: string[]) => {
-              resolve(queryStrings.reduce((x, y) => x + y, ''));
+              resolve(queryStrings.reduce((x, y) => x + y, ""));
             });
           });
         } else {
-          this.readInputFile(inputPath).then((result: string) => {
-            resolve(result);
-          }).catch((err) => {
-            console.log(`Error occurred in processing path ${inputPath}: `);
-            console.log(err.message);
-            reject(err);
-          });
+          this.readInputFile(inputPath)
+            .then((result: string) => {
+              resolve(result);
+            })
+            .catch((err) => {
+              console.log(`Error occurred in processing path ${inputPath}: `);
+              console.log(err.message);
+              reject(err);
+            });
         }
       });
     });
@@ -258,19 +276,35 @@ export class ExtractGQL {
   // Takes a document and a query definition contained within that document. Then, extracts
   // the fragments that the query depends on from the document and returns a document containing
   // only those fragments.
-  public getQueryFragments(document: DocumentNode, queryDefinition: OperationDefinitionNode): DocumentNode {
-    const queryFragmentNames = getFragmentNames(queryDefinition.selectionSet, document);
+  public getQueryFragments(
+    document: DocumentNode,
+    queryDefinition: OperationDefinitionNode
+  ): DocumentNode {
+    const queryFragmentNames = getFragmentNames(
+      queryDefinition.selectionSet,
+      document
+    );
     const retDocument: DocumentNode = {
-      kind: 'Document',
+      kind: "Document",
       definitions: [],
     };
 
-    const reduceQueryDefinitions = (carry: FragmentDefinitionNode[], definition: DefinitionNode) => {
-      const definitionName = (definition as (FragmentDefinitionNode | OperationDefinitionNode)).name;
-      if ((isFragmentDefinition(definition) && queryFragmentNames[definitionName.value] === 1)) {
-        const definitionExists = carry.findIndex(
-          (value: FragmentDefinitionNode) => value.name.value === definitionName.value,
-        ) !== -1;
+    const reduceQueryDefinitions = (
+      carry: FragmentDefinitionNode[],
+      definition: DefinitionNode
+    ) => {
+      const definitionName = (
+        definition as FragmentDefinitionNode | OperationDefinitionNode
+      ).name;
+      if (
+        isFragmentDefinition(definition) &&
+        queryFragmentNames[definitionName.value] === 1
+      ) {
+        const definitionExists =
+          carry.findIndex(
+            (value: FragmentDefinitionNode) =>
+              value.name.value === definitionName.value
+          ) !== -1;
 
         // If this definition doesn't exist yet, add it.
         if (!definitionExists) {
@@ -281,10 +315,9 @@ export class ExtractGQL {
       return carry;
     };
 
-    retDocument.definitions = document.definitions.reduce(
-      reduceQueryDefinitions,
-      ([] as FragmentDefinitionNode[]),
-    ).sort(sortFragmentsByName);
+    retDocument.definitions = document.definitions
+      .reduce(reduceQueryDefinitions, [] as FragmentDefinitionNode[])
+      .sort(sortFragmentsByName);
 
     return retDocument;
   }
@@ -296,12 +329,19 @@ export class ExtractGQL {
   }
 
   // Writes an OutputMap to a given file path.
-  public writeOutputMap(outputMap: OutputMap, outputFilePath: string): Promise<void> {
+  public writeOutputMap(
+    outputMap: OutputMap,
+    outputFilePath: string
+  ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      fs.open(outputFilePath, 'w+', (openErr, fd) => {
-        if (openErr) { reject(openErr); }
+      fs.open(outputFilePath, "w+", (openErr, fd) => {
+        if (openErr) {
+          reject(openErr);
+        }
         fs.write(fd, JSON.stringify(outputMap), (writeErr, written, str) => {
-          if (writeErr) { reject(writeErr); }
+          if (writeErr) {
+            reject(writeErr);
+          }
           resolve();
         });
       });
@@ -311,24 +351,32 @@ export class ExtractGQL {
   // Extracts GraphQL queries from this.inputFilePath and produces
   // an output JSON file in this.outputFilePath.
   public extract() {
-    this.processInputPath(this.inputFilePath).then((outputMap: OutputMap) => {
-      this.writeOutputMap(outputMap, this.outputFilePath).then(() => {
-        console.log(`Wrote output file to ${this.outputFilePath}.`);
-      }).catch((err) => {
-        console.log(`Unable to process ouput path ${this.outputFilePath}. Error message: `);
+    this.processInputPath(this.inputFilePath)
+      .then((outputMap: OutputMap) => {
+        this.writeOutputMap(outputMap, this.outputFilePath)
+          .then(() => {
+            console.log(`Wrote output file to ${this.outputFilePath}.`);
+          })
+          .catch((err) => {
+            console.log(
+              `Unable to process ouput path ${this.outputFilePath}. Error message: `
+            );
+            console.log(`${err.message}`);
+          });
+      })
+      .catch((err) => {
+        console.log(
+          `Unable to process input path ${this.inputFilePath}. Error message: `
+        );
         console.log(`${err.message}`);
       });
-    }).catch((err) => {
-      console.log(`Unable to process input path ${this.inputFilePath}. Error message: `);
-      console.log(`${err.message}`);
-    });
   }
 }
 
 // Type for the argument structure provided by the "yargs" library.
 export interface YArgsv {
   _: string[];
-  [ key: string ]: any;
+  [key: string]: any;
 }
 
 // Main driving method for the command line tool
@@ -341,7 +389,7 @@ export const main = (argv: YArgsv) => {
   const queryTransformers: QueryTransformer[] = [];
 
   if (args.length < 1) {
-    console.log('Usage: persistgraphql input_file [output_file]');
+    console.log("Usage: persistgraphql input_file [output_file]");
   } else if (args.length === 1) {
     inputFilePath = args[0];
   } else {
@@ -351,8 +399,8 @@ export const main = (argv: YArgsv) => {
 
   // Check if we are passed "--add_typename", if we are, we have to
   // apply the typename query transformer.
-  if (argv['add_typename']) {
-    console.log('Using the add-typename query transformer.');
+  if (argv["add_typename"]) {
+    console.log("Using the add-typename query transformer.");
     queryTransformers.push(addTypenameTransformer);
   }
 
@@ -362,12 +410,12 @@ export const main = (argv: YArgsv) => {
     queryTransformers,
   };
 
-  if (argv['js']) {
+  if (argv["js"]) {
     options.inJsCode = true;
   }
 
-  if (argv['extension']) {
-    options.extension = argv['extension'];
+  if (argv["extension"]) {
+    options.extension = argv["extension"];
   }
 
   new ExtractGQL(options).extract();
