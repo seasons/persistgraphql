@@ -227,6 +227,9 @@ export class ExtractGQL {
     return new Promise<OutputMap>((resolve, reject) => {
       this.readInputPath(inputPath)
         .then((docString: string) => {
+          if (docString === '') {
+            return
+          }
           try {
             resolve(this.createOutputMapFromString(docString));
           } catch (e) {
@@ -338,12 +341,16 @@ export class ExtractGQL {
         if (openErr) {
           reject(openErr);
         }
-        fs.write(fd, JSON.stringify(outputMap), (writeErr, written, str) => {
-          if (writeErr) {
-            reject(writeErr);
+        fs.write(
+          fd,
+          JSON.stringify(outputMap, null, 2),
+          (writeErr, written, str) => {
+            if (writeErr) {
+              reject(writeErr);
+            }
+            resolve();
           }
-          resolve();
-        });
+        );
       });
     });
   }
